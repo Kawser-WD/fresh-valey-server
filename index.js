@@ -1,12 +1,3 @@
-// const express = require('express')
-// const bodyParser = require('body-parser');
-// const cors = require ('cors');
-// const fileUpload = require('express-fileupload')
-// const MongoClient = require('mongodb').MongoClient;
-// const ObjectID = require('mongodb').ObjectID;
-// const publicRouter = require('./publicRouter/publicRouter');
-// const app = require('./adminRouter/adminRouter');
-// require('dotenv').config();
 const express = require('express')
 const bodyParser = require('body-parser');
 const cors = require ('cors')
@@ -148,7 +139,7 @@ app.post('/order',(req,res)=>{
 //   })
 // })
 
-app.get('/myOrder/:id', async (req, res) => {
+app.get('/myOrder/:id',verifyToken, async (req, res) => {
   const id = req.params.id;
   const query = { _id: ObjectId(id) };
   const result = await orderCollection.findOne(query);
