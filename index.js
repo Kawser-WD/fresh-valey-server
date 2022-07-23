@@ -5,7 +5,8 @@ const fileUpload = require('express-fileupload')
 const MongoClient = require('mongodb').MongoClient;
 const ObjectId = require("mongodb").ObjectId;
 const admin = require("firebase-admin");
-const fs = require('fs-extra')
+const fs = require('fs-extra');
+const { query } = require('express');
 require('dotenv').config();
 const stripe = require('stripe')(process.env.STRIPE_SECRET);
 
@@ -56,215 +57,228 @@ async function verifyToken(req, res, next) {
 }
 
 
-client.connect(err => {
-  const foodsCollection = client.db(`${process.env.DB_NAME}`).collection("foodCollections");
-  const orderCollection = client.db(`${process.env.DB_NAME}`).collection("orders");
-  const usersCollection = client.db(`${process.env.DB_NAME}`).collection("users");
-  console.log('database connection successfully')
-  // client.close();
+async function run() {
+  try{
+      await client.connect();
+      const foodsCollection = client.db(`${process.env.DB_NAME}`).collection("foodCollections");
+      const orderCollection = client.db(`${process.env.DB_NAME}`).collection("orders");
+      const usersCollection = client.db(`${process.env.DB_NAME}`).collection("users");
+      console.log('database connection successfully')
+      // client.close();
 
-  app.post('/addFood', (req, res)=>{
-    const name = req.body.name;
-    const weight = req.body.weight;
-    const price = req.body.price;
-    const file = req.files.file;
-    const newImg = file.data;
-    const encImg = newImg.toString('base64');
-    var image = {
-      contentType: file.mimetype,
-      size: file.size,
-      img: Buffer.from(encImg, 'base64')
-    };
-        foodsCollection.insertOne({ name, weight, price, image })
-        .then(result=>{
-                res.send(result.insertedCount > 0)
-        })
-        console.log(req.body)
+
+      // app.post('/addFood',  async (req, res)=>{
+      //   const name = req.body.name;
+      //   const weight = req.body.weight;
+      //   const price = req.body.price;
+      //   const file = req.files.file;
+      //   const newImg = file.data;
+      //   const encImg = newImg.toString('base64');
+      //   var image = {
+      //     contentType: file.mimetype,
+      //     size: file.size,
+      //     img: Buffer.from(encImg, 'base64')
+      //   };
+      //     const result   =  await foodsCollection.insertOne({ name, weight, price, image })
+      //     res.json(result)
+      //       console.log(result)
+      //   })
+
+      app.post('/allProduct', async (req,res)=>{
+        const newService = req.body;
+        const result  = await foodsCollection.insertOne(newService)
+        res.json(result)
+        
     })
-
-    app.get('/allProduct', (req,res)=>{
-      // const search = req.query.search;
-      // {name: {$regex: search}}
-        foodsCollection.find()
-        .toArray((err, documents)=>{
-            res.send(documents)
-            
-        })
-
-})
-
-   app.delete('/allProduct/:id', (req,res)=>{
-    foodsCollection.deleteOne({_id: ObjectId(req.params.id)})
-    .then(result=>{
-      console.log(result)
+    
+        app.get('/allProduct', async (req,res)=>{
+           const cursor = foodsCollection.find()
+           const result = await cursor.toArray();
+           res.json(result)
+    
     })
-
-})
-
-
-   app.get('/allProduct/:id', (req,res)=>{
-    foodsCollection.find({_id: ObjectId(req.params.id)})
-    .toArray((err, documents) => {
-     res.send(documents)
+    
+       app.delete('/allProduct/:id', async (req,res)=>{
+        const id = req.params.id
+        const query = {_id: ObjectId(id)}
+        const result = await foodsCollection.deleteOne(query)
+        res.send(result) 
+    
     })
-   })
+    
+    
+       app.get('/allProduct/:id', async (req,res)=>{
+        const id = req.params.id
+        const query = {_id: ObjectId(id)}
+        const result = await foodsCollection.findOne(query)
+        res.send(result)
+       })
+    
+    
+       app.put('/allProduct/:id', async (req,res)=>{
+        const id = req.params.id
+        const updateProduct = req.body
+        const filter ={_id: ObjectId(id)}
+       const updateDoc = {
+        $set:{
+          name: updateProduct.name,
+          price: updateProduct.price,
+          weight: updateProduct.weight,
 
-
-   app.patch('/allProduct/:id', (req,res)=>{
-    foodsCollection.updateOne({_id: ObjectId(req.params.id)},
-    {
-      $set:{name: req.body.name, price: req.body.price, weight: req.body.weight}
+        },
+       };
+   
+        const result = await foodsCollection.updateOne(filter, updateDoc)
+        res.send(result)
     })
-    .then(result=>{
-      console.log(result)
+    
+    
+    app.post('/order', async (req,res)=>{
+      const newOrder = req.body;
+      const result = await orderCollection.insertOne(newOrder)
+      res.json(result)
+      
     })
+    
+    
+    app.get('/myOrder', async (req, res) => {
+      let query = {};
+      const email = req.query.email;
+      if(email){
+        query = {user: email}
+      }
+          const cursor = orderCollection.find(query);
+          const orders = await cursor.toArray();
+          res.json(orders);
 
-})
+  });
 
 
-app.post('/order',(req,res)=>{
-  const newOrder = req.body;
-  orderCollection.insertOne(newOrder)
-  .then(result=>{
-      res.send(result.insertedId)
-  })
-  console.log(req.body)
-  
-})
-
-// app.get('/order',(req,res)=>{
-//   orderCollection.find({email:req.query.email})
-//   .toArray((err, order)=>{
-//       res.send(order)
-//   })
-// })
-
+    
+    app.put('/myOrder/:id', async (req, res) => {
+      const id = req.params.id;
+      const payment = req.body;
+      const filter = { _id: ObjectId(id) };
+      const updateDoc = {
+          $set: {
+              payment: payment
+          }
+      };
+      const result = await orderCollection.updateOne(filter, updateDoc);
+      res.json(result);
+    });
+    
+    
 app.get('/myOrder/:id',verifyToken, async (req, res) => {
   const id = req.params.id;
   const query = { _id: ObjectId(id) };
   const result = await orderCollection.findOne(query);
   res.json(result);
 })
-
-app.put('/myOrder/:id', (req, res) => {
-  const id = req.params.id;
-  const payment = req.body;
-  const filter = { _id: ObjectId(id) };
-  const updateDoc = {
-      $set: {
-          payment: payment
-      }
-  };
-  const result = orderCollection.updateOne(filter, updateDoc);
-  res.json(result);
-});
-
-
-app.get('/myOrder', (req,res)=>{
-  // console.log(req.query.email)
-  orderCollection.find({email:req.query.email})
-  .toArray((err, products)=>{
-    res.send(products)
-    console.log(products)
-  })
-})
-
-// delete order
-app.delete('/myOrder/:id', (req,res)=>{
-  // console.log(req.query.email)
-  orderCollection.deleteOne({_id: ObjectId(req.params.id)})
-  .then(result=>{
-    console.log(result)
-  })
-})
-
-
-
-app.post('/create-payment-intent', async (req, res) => {
-  const price = req?.body?.price
-  console.log(price)
-  const amount = price * 100
-  if (amount > 999999) {
-      return res.status(500).send({ message: 'Your price is too high' })
-  }
-  if(price){
-    const paymentIntent = await stripe.paymentIntents.create({
-      amount: amount,
-      currency: "usd",
-      payment_method_types: [
-          "card"
-      ],
-  });
-  res.send({
-    clientSecret: paymentIntent.client_secret,
-});
-  }
+    
+    // delete order
+    app.delete('/myOrder/:id', async (req,res)=>{
+      const id = req.params.id
+      const query = {_id: ObjectId(id)}
+      const result = await orderCollection.deleteOne(query)
+      res.send(result) 
   
-
-  
-
-})
-
- // use post to get products by ids
- app.post('/productByIds', (req, res) =>{
-  const keys = req.body;
-  const ids = keys.map(id => ObjectId(id));
-  const query = {_id: {$in: ids}}
-  const cursor = foodsCollection.find(query);
-  const products = cursor.toArray();
-  console.log(keys);
-  res.send(products);
-})
-
-// usres
-
-app.get('/users/:email', async (req, res) => {
-  const email = req.params.email;
-  const query = { email: email };
-  const user = await usersCollection.findOne(query);
-  let isAdmin = false;
-  if (user?.role === 'admin') {
-      isAdmin = true;
-  }
-  res.json({ admin: isAdmin });
-})
-
-app.post('/users', async (req, res) => {
-  const user = req.body;
-  const result = await usersCollection.insertOne(user);
-  console.log(result);
-  res.json(result);
-});
-
-app.put('/users', async (req, res) => {
-  const user = req.body;
-  const filter = { email: user.email };
-  const options = { upsert: true };
-  const updateDoc = { $set: user };
-  const result = await usersCollection.updateOne(filter, updateDoc, options);
-  res.json(result);
-});
-
-app.put('/users/admin', verifyToken, async (req, res) => {
-  const user = req.body;
-  const requester = req.decodedEmail;
-  if (requester) {
-      const requesterAccount = await usersCollection.findOne({ email: requester });
-      if (requesterAccount.role === 'admin') {
-          const filter = { email: user.email };
-          const updateDoc = { $set: { role: 'admin' } };
-          const result = await usersCollection.updateOne(filter, updateDoc);
-          res.json(result);
+  })
+    
+    
+    app.post('/create-payment-intent', async (req, res) => {
+      const price = req?.body?.price
+      console.log(price)
+      const amount = price * 100
+      if (amount > 999999) {
+          return res.status(500).send({ message: 'Your price is too high' })
       }
+      if(price){
+        const paymentIntent = await stripe.paymentIntents.create({
+          amount: amount,
+          currency: "usd",
+          payment_method_types: [
+              "card"
+          ],
+      });
+      res.send({
+        clientSecret: paymentIntent.client_secret,
+    });
+      }
+      
+    
+      
+    
+    })
+    
+     // use post to get products by ids
+     app.post('/productByIds', async (req, res) =>{
+      const keys = req.body;
+      const ids = keys.map(id => ObjectId(id));
+      const query = {_id: {$in: ids}}
+      const cursor = foodsCollection.find(query);
+      const products = await cursor.toArray();
+      console.log(keys);
+      res.send(products);
+    })
+    
+    // usres
+    
+    app.get('/users/:email', async (req, res) => {
+      const email = req.params.email;
+      const query = { email: email };
+      const user = await usersCollection.findOne(query);
+      let isAdmin = false;
+      if (user?.role === 'admin') {
+          isAdmin = true;
+      }
+      res.json({ admin: isAdmin });
+    })
+    
+    app.post('/users', async (req, res) => {
+      const user = req.body;
+      const result = await usersCollection.insertOne(user);
+      console.log(result);
+      res.json(result);
+    });
+    
+    app.put('/users', async (req, res) => {
+      const user = req.body;
+      const filter = { email: user.email };
+      const options = { upsert: true };
+      const updateDoc = { $set: user };
+      const result = await usersCollection.updateOne(filter, updateDoc, options);
+      res.json(result);
+    });
+    
+    app.put('/users/admin', verifyToken, async (req, res) => {
+      const user = req.body;
+      const requester = req.decodedEmail;
+      if (requester) {
+          const requesterAccount = await usersCollection.findOne({ email: requester });
+          if (requesterAccount.role === 'admin') {
+              const filter = { email: user.email };
+              const updateDoc = { $set: { role: 'admin' } };
+              const result = await usersCollection.updateOne(filter, updateDoc);
+              res.json(result);
+          }
+      }
+      else {
+          res.status(403).json({ message: 'you do not have access to make admin' })
+      }
+    
+    })
+
+
   }
-  else {
-      res.status(403).json({ message: 'you do not have access to make admin' })
+  finally{
+     // await client.close();
   }
+}
 
-})
+run().catch(console.dir);
 
-
-
-
-
+app.get('/', (req, res) => {
+    res.send('Fresh Valey server is running');
 });
+
