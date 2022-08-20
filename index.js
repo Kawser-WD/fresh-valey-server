@@ -10,11 +10,11 @@ const { query } = require('express');
 require('dotenv').config();
 const stripe = require('stripe')(process.env.STRIPE_SECRET);
 
-const port = process.env.PORT || 4000;
+const port = 4000;
 
 const app = express();
-app.use(bodyParser.json());
 app.use(cors());
+app.use(bodyParser.json());
 app.use(express.static('foods'));
 app.use(fileUpload());
 
